@@ -3,3 +3,5 @@ data/kv_sale.json
 data/kv_rent.json
 data/report.json
 data/top_*.json
+data/score10.json
+data/target10.json
