@@ -22,6 +22,8 @@ const CFG = {
 const DATA = path.join(__dirname, '..', 'data');
 const arg = (n) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : undefined; };
 const maxPages = +(arg('--max-pages') || 60);
+const reuse = process.argv.includes('--reuse');
+const TOP_N = 3; // max teavitusi päevas (tavapiirkonnad); Ida-Virumaa eraldi lõigus samuti kuni TOP_N
 
 const median = (a) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const bucket = (m2) => (m2 < 35 ? 'S' : m2 < 50 ? 'M' : 'L');
@@ -47,12 +49,20 @@ function estimate(items, getVal, l, minN) {
 
 async function main() {
   fs.mkdirSync(DATA, { recursive: true });
-  const sale = (await scrape({ dealType: 1, priceMax: CFG.saleCompCap, maxPages })).map(enrich).filter((x) => x.price > 0 && x.area > 0);
-  const rent = (await scrape({ dealType: 2, maxPages })).map(enrich).filter((x) => x.price > 50 && x.area > 0 && x.price < 5000);
+  let sale, rent;
+  if (reuse) {
+    sale = JSON.parse(fs.readFileSync(path.join(DATA, 'kv_sale.json'), 'utf8'));
+    rent = JSON.parse(fs.readFileSync(path.join(DATA, 'kv_rent.json'), 'utf8'));
+  } else {
+    sale = (await scrape({ dealType: 1, priceMax: CFG.saleCompCap, maxPages })).map(enrich).filter((x) => x.price > 0 && x.area > 0);
+    rent = (await scrape({ dealType: 2, maxPages })).map(enrich).filter((x) => x.price > 50 && x.area > 0 && x.price < 5000);
+  }
   rent.forEach((x) => (x.perM2 = x.price / x.area));
   sale.forEach((x) => (x.perM2 = x.price / x.area));
-  fs.writeFileSync(path.join(DATA, 'kv_sale.json'), JSON.stringify(sale));
-  fs.writeFileSync(path.join(DATA, 'kv_rent.json'), JSON.stringify(rent));
+  if (!reuse) {
+    fs.writeFileSync(path.join(DATA, 'kv_sale.json'), JSON.stringify(sale));
+    fs.writeFileSync(path.join(DATA, 'kv_rent.json'), JSON.stringify(rent));
+  }
 
   const scored = [];
   for (const l of sale) {
@@ -76,12 +86,16 @@ async function main() {
     });
   }
   scored.sort((a, b) => b.gross - a.gross);
-  const strong = scored.filter((x) => x.gross >= CFG.minGross && x.discount !== null && x.discount >= CFG.minDiscount && x.rentLevel !== 'maakond' && !x.suspicious);
+  const strong = scored.filter((x) => x.gross >= CFG.minGross && x.discount !== null && x.discount >= CFG.minDiscount && x.rentLevel === 'linn+suurus' && x.rentN >= 6 && !x.suspicious);
+  strong.sort((a, b) => b.net + b.discount * 0.1 - (a.net + a.discount * 0.1));
   const watch = scored.filter((x) => x.gross >= CFG.watchGross && !strong.includes(x) && !x.suspicious);
 
   const statePath = path.join(DATA, 'notified.json');
   const notified = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : {};
-  const fresh = strong.filter((x) => !notified[x.id]);
+  const isIV = (x) => /Ida-Virumaa/.test(x.address);
+  const unseen = strong.filter((x) => !notified[x.id]);
+  const fresh = [...unseen.filter((x) => !isIV(x)).slice(0, TOP_N), ...unseen.filter(isIV).slice(0, TOP_N)];
+  fresh.forEach((x) => (x.region = isIV(x) ? 'Ida-Virumaa' : 'Muu Eesti'));
   const today = new Date().toISOString().slice(0, 10);
   fresh.forEach((x) => (notified[x.id] = today));
   fs.writeFileSync(statePath, JSON.stringify(notified, null, 1));
