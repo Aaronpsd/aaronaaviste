@@ -73,7 +73,7 @@ async function main() {
   const scored = [];
   for (const l of sale) {
     if (l.price > CFG.priceMax || l.area < CFG.minArea) continue;
-    if (exclCounty && l.county === exclCounty) continue;
+    if (exclCounty && exclCounty.split(',').includes(l.county)) continue;
     if (nation ? false : cityArg ? l.city !== cityArg : CFG.county && l.county !== CFG.county) continue;
     const text = `${l.details} ${l.title} ${l.note}`;
     if (CFG.stoveRe.test(text)) continue;

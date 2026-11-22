@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const rows = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'score10.json'), 'utf8'));
-const W = { yield: 0.25, effort: 0.2, cheap: 0.15, discount: 0.15, demand: 0.15, conf: 0.1 };
+const W = { yield: 0.30, cheap: 0.18, discount: 0.17, demand: 0.15, conf: 0.10, prox: 0.10 };
 const clamp = (v, a = 0, b = 10) => Math.max(a, Math.min(b, v));
 const MARKET = (r) => r.marketPerM2 * r.area; // turu mediaan selle suuruse kohta
 
@@ -61,4 +61,4 @@ const out = rows.map((r) => {
 // järjestus: parim skoor realistliku hinna juures
 out.sort((a, b) => b.scoreAtReal - a.scoreAtReal);
 fs.writeFileSync(path.join(__dirname, '..', 'data', 'target10.json'), JSON.stringify(out, null, 1));
-out.forEach((r, i) => console.log(`${String(i + 1).padStart(2)} praegu ${r.scoreNow.toFixed(1)} → realistlik ${r.scoreAtReal.toFixed(1)} (${r.realistic}€, -${Math.round(r.room * 100)}%) | 10/10-hind ${r.price10}€ (-${Math.round(r.needDisc * 100)}%) skoor ${r.scoreAt10.toFixed(1)} | ask ${r.price}€ | ${r.address.split(',').slice(0, 2).join(',').slice(0, 36)} | vaev ${r.sc.effort} nõud ${r.sc.demand.toFixed(0)} usald ${r.sc.conf.toFixed(0)}`));
+out.forEach((r, i) => console.log(`${String(i + 1).padStart(2)} praegu ${r.scoreNow.toFixed(1)} → realistlik ${r.scoreAtReal.toFixed(1)} (${r.realistic}€, -${Math.round(r.room * 100)}%) | 10/10-hind ${r.price10}€ (-${Math.round(r.needDisc * 100)}%) skoor ${r.scoreAt10.toFixed(1)} | ask ${r.price}€ | ${r.address.split(',').slice(0, 2).join(',').slice(0, 36)} | nõud ${r.sc.demand.toFixed(0)} usald ${r.sc.conf.toFixed(0)}`));

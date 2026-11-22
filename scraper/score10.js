@@ -8,7 +8,7 @@ const rent = JSON.parse(fs.readFileSync(path.join(D, 'kv_rent.json'), 'utf8'));
 const cand = JSON.parse(fs.readFileSync(path.join(D, 'top_Eesti.json'), 'utf8'));
 const topN = +(process.argv[process.argv.indexOf('--top') + 1] || 30);
 
-const W = { yield: 0.25, effort: 0.2, cheap: 0.15, discount: 0.15, demand: 0.15, conf: 0.1 };
+const W = { yield: 0.30, cheap: 0.18, discount: 0.17, demand: 0.15, conf: 0.10, prox: 0.10 };
 const clamp = (v, a = 0, b = 10) => Math.max(a, Math.min(b, v));
 const med = (a) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const cityOf = (a) => { const p = a.split(',').map((s) => s.trim()); return p.length >= 3 ? p[p.length - 2] : p[p.length - 1]; };
@@ -28,6 +28,14 @@ for (const x of sale) (stat[x.city] = stat[x.city] || { s: 0, r: 0 }).s++;
 for (const x of rent) (stat[x.city] = stat[x.city] || { s: 0, r: 0 }).r++;
 
 const DISTRICT = /kesklinn|linnaosa|ülejõe|^mai$|rannarajoon|annelinn|karlova|supilinn|tammelinn|ropka|variku|veeriku|vaksali|raadi|jaamamõisa|kvissental|kristiine|lasnamäe|mustamäe|nõmme|pirita|haabersti|põhja-tallinn|männimäe|port artur|rääma|pärnamäe|sauga|papsaare|uus-sauga|vana-pärnu|kitseküla|kadriorg|pelgulinn|merivälja|rocca|maardu|asum|elamurajoon/i;
+// ligikaudne kaugus Tallinnast (km maanteed); võtmed on sobitatud aadressiga
+const KM = [
+  [/Tallinn/i, 0], [/Maardu/i, 17], [/Saue|Saku|Keila|Viimsi|Rae vald|Harku|, Jüri,|Jüri alevik|Kiili|Haabneeme/i, 22], [/Ämari|Lääne-Harju|Rummu|Kloogaranna|Harju-Risti/i, 45],
+  [/Paldiski/i, 52], [/Rapla|Kohila|Kehtna/i, 50], [/Kose|Kuusalu|Anija|Loksa|Kolga/i, 45], [/Tapa|Tamsalu/i, 85], [/Rakvere/i, 100], [/Paide|Roosna-Alliku|Türi/i, 90],
+  [/Haapsalu|Lääne-Nigula|Läänemaa/i, 105], [/Pärnu|Audru|Kõima|Lavassaare|Paikuse|Papsaare|Ahaste|Tahkuranna/i, 130], [/Viljandi/i, 160], [/Jõgeva|Põltsamaa|Kuremaa|Kurista/i, 160],
+  [/Tartu|Laeva|Siniküla|Lähte|Märja|Tabivere/i, 190], [/Kuressaare|Saaremaa/i, 215], [/Põlva/i, 240], [/Võru|Räpina/i, 260], [/Valga/i, 265],
+];
+const kmFrom = (addr) => { for (const [re, km] of KM) if (re.test(addr)) return km; return 150; };
 const stem = (x) => x.replace(/\s+(linn|vald|alev|alevik|küla)$/i, '').toLowerCase();
 const isVillage = (a) => {
   const p = a.split(',').map((x) => x.trim());
@@ -46,7 +54,7 @@ for (const c of cand) {
   const rentNear = med(near.map((r) => r.price));
   const spread = (Math.max(...near.map((r) => r.price)) - Math.min(...near.map((r) => r.price))) / rentNear;
   const rentEst = Math.min(rentNear, c.rentEst); // konservatiivne: väiksem kahest meetodist
-  const cond = condition(c.details);
+  const cond = condition(c.details); // seisukorda kasutame ainult remondivaru (raha) hinnangus, mitte skooris
   const cost = c.price + cond.reno;
   const netY = (rentEst * 12 * 0.85) / cost;
   const grossY = (rentEst * 12) / c.price;
@@ -55,12 +63,13 @@ for (const c of cand) {
   const ageDays = Math.round((maxId - +c.id) / 500);
   const sc = {
     yield: clamp(((netY - 0.04) / 0.12) * 10),
-    effort: cond.score,
     cheap: clamp(10 * (1 - (cost - 15000) / 65000)),
     discount: clamp((c.discount / 0.5) * 10),
     demand: clamp(0.5 * Math.min(10, st.r / 12) + 0.5 * clamp(10 - 2 * ratio)),
     conf: clamp(0.5 * Math.min(10, c.rentN / 3) + 0.5 * clamp(10 - spread * 10)),
+    prox: clamp(10 * (1 - (kmFrom(c.address) - 30) / 220)),
   };
+  const km = kmFrom(c.address);
   // karistus: ei luba kõrget skoori, kui võrdlus on liiga õhuke või kuulutus kahtlane
   const flags = [];
   if (/enampakkumi|kohtutäitur/i.test(`${c.title} ${c.details}`)) flags.push('enampakkumine');
@@ -73,9 +82,9 @@ for (const c of cand) {
   if (village) { sc.conf = Math.min(sc.conf, 3); sc.demand = Math.min(sc.demand, 3); sc.discount = Math.min(sc.discount, 4); }
   if (grossY < 0.07) continue; // sinu miinimum: bruto 7%
   const total = Object.keys(W).reduce((s, k) => s + sc[k] * W[k], 0);
-  rows.push({ ...c, city, rentEst: Math.round(rentEst), rentOld: c.rentEst, rentNear: Math.round(rentNear), cond: cond.label, reno: cond.reno, cost, grossY, netY, ratio, rentListings: st.r, saleListings: st.s, ageDays, sc, total, flags });
+  rows.push({ ...c, city, rentEst: Math.round(rentEst), rentOld: c.rentEst, rentNear: Math.round(rentNear), cond: cond.label, reno: cond.reno, cost, grossY, netY, ratio, rentListings: st.r, saleListings: st.s, ageDays, km, sc, total, flags });
 }
 rows.sort((a, b) => b.total - a.total);
 fs.writeFileSync(path.join(D, 'score10.json'), JSON.stringify(rows.slice(0, topN), null, 1));
 console.log(`hinnatud ${rows.length}, top ${topN}`);
-rows.slice(0, topN).forEach((r, i) => console.log(`${String(i + 1).padStart(2)} ${r.total.toFixed(1)} | y${r.sc.yield.toFixed(0)} e${r.sc.effort} c${r.sc.cheap.toFixed(0)} d${r.sc.discount.toFixed(0)} n${r.sc.demand.toFixed(0)} k${r.sc.conf.toFixed(0)} | ${r.price}€ ${r.area}m² üür${r.rentEst} (vana ${r.rentOld}) bruto${(r.grossY * 100).toFixed(1)} neto${(r.netY * 100).toFixed(1)} | ${r.cond} | ${r.address.split(',').slice(0, 3).join(',').slice(0, 42)} | ${r.flags.join(';')}`));
+rows.slice(0, topN).forEach((r, i) => console.log(`${String(i + 1).padStart(2)} ${r.total.toFixed(1)} | y${r.sc.yield.toFixed(0)} c${r.sc.cheap.toFixed(0)} d${r.sc.discount.toFixed(0)} n${r.sc.demand.toFixed(0)} k${r.sc.conf.toFixed(0)} | ${r.price}€ ${r.area}m² üür${r.rentEst} (vana ${r.rentOld}) bruto${(r.grossY * 100).toFixed(1)} neto${(r.netY * 100).toFixed(1)} | ${r.cond} | ${r.address.split(',').slice(0, 3).join(',').slice(0, 42)} | ${r.flags.join(';')}`));
