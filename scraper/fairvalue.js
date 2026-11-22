@@ -137,3 +137,55 @@ if (NEAR) {
   console.log(`\nLÄHEDAL (<=${MAX_KM} km, õiglane hind <${MAX_FAIR}, ei puitmaja/ahi/sokkel): ${cands.length}`);
   cands.slice(0, 20).forEach((x, i) => console.log(`${i + 1}) -${Math.round(x.disc * 100)}% | ${x.price}€ vs õiglane ${x.fairPrice}€ (${x.compN} võrd.) | ${x.km}km | ${x.area}m² | ${x.cond} | ${x.address.split(',').slice(0, 3).join(',')} | ${x.ageDays}p | ${x.flags.join(';')} | ${x.url}`));
 }
+
+// ===== Tallinna hinnang 0-10 ja kauplemise sihthinnad (--rate) =====
+if (process.argv.includes('--rate')) {
+  const rentAll = JSON.parse(fs.readFileSync(path.join(D, 'kv_rent.json'), 'utf8'));
+  const rentT = rentAll.map((x) => ({ ...x, ...geo(x.address) })).filter((x) => x.city === 'Tallinn' && x.area > 0 && x.price > 80 && x.price < 3000);
+  const clamp = (v, a = 0, b = 10) => Math.max(a, Math.min(b, v));
+  const NOLAS = /Lasnamäe/i;
+  const W = { disc: 0.40, yld: 0.30, cheap: 0.10, conf: 0.20 };
+  function rentEst(l) {
+    const near = (x) => Math.abs(x.area - l.area) / l.area <= 0.3;
+    const a = rentT.filter((x) => x.district === l.district && near(x));
+    const b = rentT.filter((x) => near(x));
+    const pool = a.length >= 5 ? a : b;
+    if (pool.length < 5) return null;
+    return { value: med(pool.map((x) => x.price / x.area)) * l.area, n: pool.length, level: a.length >= 5 ? 'linnaosa' : 'Tallinn' };
+  }
+  const renoOf = (l) => (l.cond === 'vajab remonti' ? 10000 : l.cond === 'keskmine / teadmata' ? 3000 : 0);
+  function rate(l, price, re) {
+    const cost = price + renoOf(l);
+    const disc = 1 - price / l.fairPrice; // allahindlus õiglasest hinnast
+    const net = (re.value * 12 * 0.85) / cost;
+    const sc = {
+      disc: clamp((disc / 0.30) * 10), // 30% alla õiglase = 10
+      yld: clamp(((net - 0.04) / 0.04) * 10), // neto 4% = 0, 8% = 10
+      cheap: clamp(10 * (1 - (cost - 40000) / 60000)), // kogusumma 40 000 € = 10, 100 000 € = 0
+      conf: clamp(0.6 * Math.min(10, l.compN / 3) + 0.4 * Math.min(10, re.n / 2)),
+    };
+    return { total: Object.keys(W).reduce((s, k) => s + sc[k] * W[k], 0), sc, net, cost, disc };
+  }
+  function priceFor(l, re, goal) {
+    const lo = Math.round(l.price * 0.55);
+    if (rate(l, lo, re).total < goal) return null; // ei saavutata isegi -45% korral
+    if (rate(l, l.price, re).total >= goal) return l.price;
+    let a = lo, b = l.price;
+    for (let i = 0; i < 40; i++) { const m = (a + b) / 2; if (rate(l, m, re).total >= goal) a = m; else b = m; }
+    return Math.round(a / 100) * 100;
+  }
+  const out = [];
+  for (const l of rows) {
+    if (l.city !== 'Tallinn' || NOLAS.test(`${l.district} ${l.address}`)) continue;
+    if ((MAX_PRICE ? l.price > MAX_PRICE : l.fairPrice > MAX_FAIR) || l.disc <= 0 || l.disc >= 0.6 || l.compN < 4) continue;
+    if (/enampakkumi|kohtutäitur/i.test(`${l.title} ${l.note}`)) continue;
+    const re = rentEst(l);
+    if (!re) continue;
+    const now = rate(l, l.price, re);
+    out.push({ ...l, rent: Math.round(re.value), rentN: re.n, rentLevel: re.level, reno: renoOf(l), score: now.total, sc: now.sc, net: now.net, price8: priceFor(l, re, 8), price9: priceFor(l, re, 9), price10: priceFor(l, re, 9.7), maxScore: rate(l, Math.round(l.price * 0.55), re).total });
+  }
+  out.sort((a, b) => b.score - a.score);
+  fs.writeFileSync(path.join(D, MAX_PRICE ? 'tallinn_rated_price.json' : 'tallinn_rated.json'), JSON.stringify(out, null, 1));
+  console.log('\nTALLINN (ilma Lasnamäeta, puitmajadeta, sokliteta; õiglane hind <=' + MAX_FAIR + '):', out.length);
+  out.slice(0, 20).forEach((x, i) => console.log(`${i + 1}) ${x.score.toFixed(1)} | ${x.price}€ vs õiglane ${x.fairPrice}€ -${Math.round(x.disc * 100)}% | ${x.area}m² | üür ~${x.rent} (${x.rentN}) neto ${(x.net * 100).toFixed(1)}% | 8: ${x.price8 ?? '-'} 9: ${x.price9 ?? '-'} | max ${x.maxScore.toFixed(1)} | ${x.address.split(',').slice(0, 3).join(',')} | ${x.cond} | ${x.ageDays}p | ${x.url}`));
+}
