@@ -94,7 +94,7 @@ function stBlock(x, i, list, ltMap) {
   const lt = ltMap.get(x.id);
   const lines = [];
   lines.push(`${i}. ${short(x.address)} (${x.url})`);
-  lines.push(`   Miks: ${m.area} ööhind ~${eur(m.adr)} (Booking.com valim, ${m.n} kuulutust; suuruse korrektsioon ja ×0,9 realiseerimine), täituvus ${pct(m.occ, 0)} (hinnang) → käive ${eur(m.rev)}; netotulu ${eur(m.noi)}; netotootlus ${pct(m.netY)}, riskiga korrigeeritud ${pct(x.riskAdj)}.`);
+  lines.push(`   Miks: ${m.area} ööhind ~${eur(m.adr)} (Booking.com valim, ${m.n} kuulutust; suuruse korrektsioon ja ×0,9 realiseerimine), täituvus ${pct(m.occ, 0)} (hinnang${x.m.area === 'Pärnu' ? '; Pärnu 45% hooajalisuse tõttu' : ''}) → käive ${eur(m.rev)}; netotulu ${eur(m.noi)}; netotootlus ${pct(m.netY)}, riskiga korrigeeritud ${pct(x.riskAdj)}.`);
   lines.push(`   Võrdlus: ${percentileText(i, n)}; ${fourth ? `${((x.riskAdj - fourth.riskAdj) * 100).toFixed(1).replace('.', ',')} pp parem 4. kohast` : ''}; kandidaatide mediaan ${pct(med(list.map((y) => y.riskAdj)))}.`);
   lines.push(`   Arvutus: käive ${eur(m.rev)} − platvorm 15% ${eur(m.rev * P.platform)} − haldus 22% ${eur(m.rev * P.mgmt)} − kommunaalid ${eur((x.area < 30 ? 120 : x.area <= 45 ? 150 : 180) * 12)} − KÜ ${eur(T.stModel ? x.area * P.kuPerM2 * 12 : 0)} − remondireserv ${eur(P.reserve * x.bid)} − kindlustus ${eur(P.insurance)} = ${eur(m.noi)}. Investeering ${eur(m.invest)} (ost ${eur(x.bid)} + ostukulud + sisustus ${eur(P.furnish)}${x.reno ? ' + remont ' + eur(x.reno) : ''}).`);
   lines.push(`   OÜ-s kasum ${eur(m.noi)} (jaotamata kasumilt maksu pole); väljamakse järel (22/78) jääb ${eur(m.afterPayout)}. Omakapitali tootlus ${pct(m.coc)}.`);
@@ -147,7 +147,7 @@ function buildReport() {
   out.push(`Allikas: kv.ee (kraapimine ${new Date().toISOString().slice(0, 10)}). Müügikuulutusi toorelt ${rawCount} (kogu Eesti kuni 150 000 € + Harjumaa kuni 300 000 €), unikaalseid ${unique}, pärast puhastust ${T.clean.length}, välja jäetud ${T.excluded.length} (tavapärane korteriomand puudub: kaasomand, üürnikuga, enampakkumine, sokkel, uusarendus, ostjapoolsed kuulutused, vigased andmed jm). Hinnafiltriga ≤ ${eur(P.maxPrice)} jäi ${underCap} objekti. Üürikuulutusi ${T.rawRent.length}.`);
   out.push(`Strateegiate kandidaadid (≤ 100 000 €): pikaajaline üür ${ev.lt.length}, lühiajaline üür ${ev.st.length} (ainult Tallinn, Tartu ja Pärnu keskus, kus on Booking.com võrdlused), flip ${ev.flip.length} (neist tingimused täidavad ${T.rankFlip(ev.flip).length}), otse edasimüük ${ev.direct.length} (neist ≥ 20% alla turu ${T.rankDirect(ev.direct).length}).`);
   out.push('Andmete kvaliteet ja muudatused parameetrites (oluline):');
-  out.push(`- Failis EI OLE lühiajalise üüri andmeid; võtsin öö-hinnad Booking.com avalikest otsingutulemustest (22.11.2026, 10 piirkonda, ~3-27 kuulutust piirkonnas, valim on Bookingu populaarsuse järgi). Täituvuse mõõdetud andmeid ei ole: kasutasin 55% (Tallinna kesklinn, Tartu, Pärnu) ja 50% (muud Tallinna linnaosad) hinnangut. Tulemused lühiajalise üüri kohta on seetõttu väga hinnangulised.`);
+  out.push(`- Failis EI OLE lühiajalise üüri andmeid; võtsin öö-hinnad Booking.com avalikest otsingutulemustest (22.11.2026, 10 piirkonda, ~3-27 kuulutust piirkonnas, valim on Bookingu populaarsuse järgi). Täituvuse mõõdetud andmeid ei ole: kasutasin 55% (Tallinna kesklinn, Tartu), 45% (Pärnu, tugev hooajalisus) ja 50% (muud Tallinna linnaosad) hinnangut. Tulemused lühiajalise üüri kohta on seetõttu väga hinnangulised.`);
   out.push(`- Kuulutustes EI OLE KÜ haldustasu ega energiaklassi: KÜ kulu arvestan hinnanguga ${P.kuPerM2} €/m²/kuus; energiaklassi lisa (+0,5 pp) ma ei saanud rakendada.`);
   out.push(`- Hinnalangetuste ajalugu ei ole: päevad turul hindan kuulutuse ID järgi (~500 uut ID-d päevas; ligikaudne), hinnalangetusi tuvastan ainult teksti järgi ("uus hind").`);
   out.push(`- Seisukorra klassi määran kuulutuse seisukorra välja ja kirjelduse järgi; pilte ei analüüsinud. Ehitusaasta puudub ${missingYear} kuulutusel (${(missingYear / T.clean.length * 100).toFixed(0)}%).`);
@@ -274,7 +274,7 @@ function buildReport() {
 
   H('MEGA DIILID PRAEGU (värsked ≤ 30 päeva, usaldusväärsus ≥ keskmine)');
   if (!mega.length) out.push('Praegu mega diile ei ole.');
-  mega.slice(0, 10).forEach((m) => out.push(`- ${m.strategy}: ${short(m.x.address)} — ${m.main} (${m.x.url})`));
+  mega.slice(0, 10).forEach((m) => out.push(`- ${m.strategy}: ${short(m.x.address)} — ${m.main}\n  LINK: ${m.x.url}`));
   return { text: out.join('\n'), ev, top, mega };
 }
 
@@ -307,7 +307,7 @@ function daily() {
   const body = [];
   for (const m of fresh.slice(0, 5)) {
     const x = m.x;
-    body.push(`${short(x.address)}\n${x.url}\nKüsitud ${eur(x.ask)}, pakkumisvahemik ${rangeStr(x)} (arvutuses ${eur(x.bid)})\nStrateegia: ${m.strategy}. ${m.main}.${x.m && x.m.netY !== undefined ? ' Netotootlus ' + pct(x.m.netY) + ', riskiga korrigeeritud ' + pct(x.riskAdj) + '.' : ''}${x.m && x.m.net !== undefined ? ' Puhaskasum ' + eur(x.m.net) + ', riskiga korrigeeritud ' + eur(x.m.adj) + '.' : ''}`);
+    body.push(`${short(x.address)}\nLINK: ${x.url}\nKüsitud ${eur(x.ask)}, pakkumisvahemik ${rangeStr(x)} (arvutuses ${eur(x.bid)})\nStrateegia: ${m.strategy}. ${m.main}.${x.m && x.m.netY !== undefined ? ' Netotootlus ' + pct(x.m.netY) + ', riskiga korrigeeritud ' + pct(x.riskAdj) + '.' : ''}${x.m && x.m.net !== undefined ? ' Puhaskasum ' + eur(x.m.net) + ', riskiga korrigeeritud ' + eur(x.m.adj) + '.' : ''}`);
     if (x.strategy === 'direct') body.push(`Miks mega diil: ostuhind ${pct(x.disc, 0)} alla turuväärtuse (${Math.round(x.mvPerM2)} €/m² mediaan, ${x.mvN} võrdlust; objekt ${eur(x.perM2)}/m²); müüja viited kiirele müügile/hinnalangetusele.`);
     else if (x.strategy === 'flip') body.push(`Miks mega diil: ARV ${eur(x.m.arv)} (${Math.round(x.arvPerM2)} €/m², ${x.arvN} võrdlust) vs ostuhind ${eur(x.bid)} + remont ${eur(x.m.reno)}; puhaskasum ${pct(x.m.pct, 0)} kogukuludest.`);
     else if (x.strategy === 'st') body.push(`Miks mega diil: ööhind ~${eur(x.m.adr)} × 365 × ${pct(x.m.occ, 0)} täituvus = ${eur(x.m.rev)} käivet; netotulu ${eur(x.m.noi)} investeeringult ${eur(x.m.invest)}. Piirkonna ööhind põhineb Booking.com valimil, täituvus on hinnang.`);

@@ -18,7 +18,7 @@ const BASE = {
   vacancy: { top: 1, mid: 2, low: 3 }, // tühjad kuud
   reserve: 0.01, insurance: 100, kuPerM2: 1.2, incomeTax: 0.22,
   adrRealized: 0.9, platform: 0.15, mgmt: 0.22, furnish: 6000,
-  occ: { centre: 0.55, other: 0.5 },
+  occ: { centre: 0.55, other: 0.5, parnu: 0.45 }, // Pärnu: tugev hooajalisus -> 45% (kasutaja otsus 22.11)
   reno: { cosm: 250, mid: 450, full: 700 }, renoReserve: 0.12, flipMonths: 6, holdUtil: 50,
   directMonths: 2.5, directMinDisc: 0.20,
   flipMinProfit: 12000, flipMinPct: 0.15,
@@ -205,7 +205,7 @@ function stModel(x, pr, reno, adrMult = 1) {
   const a = stArea(x); const b = a && booking[a];
   if (!b) return null;
   const adrY = (0.42 * b.talv + 0.33 * b.kevad + 0.25 * b.suvi) * sizeMult(x.area) * P.adrRealized * adrMult;
-  const occ = a === 'Kesklinn' || a === 'Tartu' || a === 'Pärnu' ? P.occ.centre : P.occ.other;
+  const occ = a === 'Pärnu' ? P.occ.parnu : a === 'Kesklinn' || a === 'Tartu' ? P.occ.centre : P.occ.other;
   const rev = adrY * 365 * occ;
   const util = (x.area < 30 ? 120 : x.area <= 45 ? 150 : 180) * 12;
   const costs = rev * (P.platform + P.mgmt) + util + kuOf(x) * 12 + P.reserve * pr.bid + P.insurance;
