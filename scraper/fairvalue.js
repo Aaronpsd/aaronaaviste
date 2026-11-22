@@ -1,0 +1,108 @@
+// Õiglane turuväärtus vs küsitav hind. Tallinn ja Harjumaa (v.a Tallinn), kõik hinnaklassid kuni 300 000 €.
+// Eeldab data/kv_sale_harju.json. Kasutus: node scraper/fairvalue.js [--top 5]
+const fs = require('fs');
+const path = require('path');
+const D = path.join(__dirname, '..', 'data');
+const arg = (n, d) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : d; };
+const topN = +arg('--top', 5);
+
+const sale = JSON.parse(fs.readFileSync(path.join(D, 'kv_sale_harju.json'), 'utf8'));
+const parts = (a) => a.split(',').map((s) => s.trim()).filter(Boolean);
+const geo = (a) => {
+  const p = parts(a);
+  const ti = p.findIndex((x) => /^Tallinn$/i.test(x));
+  if (ti > 0) return { city: 'Tallinn', district: p[ti - 1] };
+  if (p.length >= 3) return { city: p[p.length - 1].replace(/,?\s*Harjumaa$/i, ''), district: p[1] };
+  return { city: p[p.length - 1], district: p[0] };
+};
+sale.forEach((x) => { const g = geo(x.address); x.city = g.city; x.district = g.district; });
+const med = (a) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const yearOf = (d) => { const m = /ehitusaasta\s+(\d{4})/i.exec(d || ''); return m ? +m[1] : null; };
+const era = (y) => (y === null ? null : y < 1960 ? 'a' : y < 1990 ? 'b' : y < 2010 ? 'c' : 'd');
+const floorOf = (d) => { const m = /Korrus\s+(-?\d+)\s*\//i.exec(d || ''); return m ? +m[1] : null; };
+const NEEDS = /vajab\s+(san\.?\s*)?(remon|reno|uuenda)|remonti\s+vajav|täielikku remonti|halvas/i;
+const RENOVATED = /renoveeritud|uus\s+remont|uuendatud|kapitaalselt|heas\s+(korras|seisukorras)|san\.?\s*remont\s+tehtud|valmis\s+(sisse|kolimiseks)|uus\s+(torustik|elektrisüsteem)|\buus\s*,/i;
+const cond = (d) => (NEEDS.test(d) ? 'N' : RENOVATED.test(d) ? 'R' : 'M');
+const CONDNAME = { N: 'vajab remonti', R: 'heas korras / renoveeritud', M: 'keskmine / teadmata' };
+const maxId = Math.max(...sale.map((x) => +x.id));
+const ageDays = (l) => Math.round((maxId - +l.id) / 500);
+const STOVE = /ahi-?k[üu]t|ahjuk[üu]t|ahjuk[üu]te|ahjud?\b|puuk[üu]te|puuk[üu]tte|kaminak[üu]t|puuahi|ahjuga|ahi\b/i;
+
+function excluded(l) {
+  const text = `${l.details} ${l.title} ${l.note}`;
+  const fl = floorOf(l.details);
+  if (l.area < 25 || l.price < 15000 || l.price / l.area < 300) return 'hind/pindala';
+  if (STOVE.test(text)) return 'ahiküte';
+  if ((fl !== null && fl <= 0) || /sokli|keldri|kelder/i.test(`${l.details} ${l.title}`)) return 'sokkel';
+  if (/kaasomand/i.test(l.details) || /kaks\s+(eraldiseisvat\s+)?korterit|kahe\s+korteri|korterid\s+koos/i.test(`${l.title} ${l.note}`)) return 'kaasomand/mitu';
+  if (/kiire\s+ost|ostan\b|ostame\b|soovin\s+osta|igas\s+seisukorras/i.test(`${l.title} ${l.note}`)) return 'ostjapoolne';
+  if (/üürilepinguga|koormatud|üürnik(uga)?\b/i.test(`${l.title} ${l.note}`)) return 'üürnikuga/koormatud';
+  if (/uusarendus|uusehitus|broneeri|valmib\s+20(2[6-9])|esimesed majad/i.test(`${l.title} ${l.note}`) || (yearOf(l.details) || 0) >= 2025) return 'uusarendus';
+  return null;
+}
+
+const pool = sale.filter((x) => !excluded(x) || true); // võrdlusbaas: kõik kuulutused
+const compPool = sale.filter((x) => !/sokli|keldri|kelder/i.test(`${x.details} ${x.title}`) && !/kaasomand/i.test(x.details) && x.price >= 15000 && x.area >= 20 && !/uusarendus|broneeri|valmib\s+20(2[6-9])|esimesed majad/i.test(`${x.title} ${x.note}`) && (yearOf(x.details) || 0) < 2025);
+
+function fair(l) {
+  const sizeOK = (x) => Math.abs(x.area - l.area) / l.area <= 0.25;
+  const eraOK = (x) => era(yearOf(x.details)) === null || era(yearOf(l.details)) === null || era(yearOf(x.details)) === era(yearOf(l.details));
+  const sameCond = (x) => cond(x.details) === cond(l.details);
+  const base = compPool.filter((x) => x.id !== l.id && sizeOK(x) && eraOK(x));
+  const tries = [
+    [base.filter((x) => x.district === l.district && x.city === l.city && sameCond(x)), 'asum+suurus+seisukord', 4],
+  ];
+  for (const [arr, lvl, minN] of tries) {
+    if (arr.length >= minN) {
+      const perM2 = arr.map((x) => x.price / x.area);
+      return { perM2: med(perM2), n: arr.length, level: lvl, comps: arr, medAge: med(arr.map(ageDays)) };
+    }
+  }
+  return null;
+}
+
+const rows = [];
+const skip = {};
+for (const l of sale) {
+  const ex = excluded(l);
+  if (ex) { skip[ex] = (skip[ex] || 0) + 1; continue; }
+  const f = fair(l);
+  if (!f) { skip.võrdlusiVähe = (skip.võrdlusiVähe || 0) + 1; continue; }
+  const fairPrice = Math.round(f.perM2 * l.area);
+  const disc = 1 - l.price / fairPrice;
+  rows.push({
+    id: l.id, url: l.url, address: l.address, city: l.city, district: l.district, area: l.area, rooms: l.rooms, price: l.price, perM2: Math.round(l.price / l.area),
+    details: l.details, title: l.title, note: l.note, cond: CONDNAME[cond(l.details)], ageDays: ageDays(l),
+    fairPerM2: Math.round(f.perM2), fairPrice, disc, saving: fairPrice - l.price, compN: f.n, compLevel: f.level, compMedAge: Math.round(f.medAge),
+    comps: [...f.comps].sort((a, b) => Math.abs(a.area - l.area) - Math.abs(b.area - l.area)).slice(0, 3).map((x) => ({ price: x.price, area: x.area, perM2: Math.round(x.price / x.area), addr: x.address.split(',').slice(0, 3).join(','), url: x.url, details: x.details })),
+    flags: [],
+  });
+}
+for (const r of rows) {
+  if (/enampakkumi|kohtutäitur/i.test(`${r.title} ${r.note}`)) r.flags.push('enampakkumine/kohtutäitur');
+  if (r.compN < 6) r.flags.push(`${r.compN} võrdlust`);
+  if (r.disc > 0.5) r.flags.push('allahindlus üle 50%: kontrolli, miks');
+  if (r.ageDays > 300) r.flags.push(`üleval ~${Math.round(r.ageDays / 30)} kuud`);
+  if (r.cond === 'vajab remonti') r.flags.push('vajab remonti');
+}
+// sama maja kontroll: teised kuulutused samal tänavanumbril
+const streetKey = (a) => parts(a)[0].toLowerCase().replace(/[-\/]\s*\d+.*$/, '').replace(/\s+/g, ' ').trim() + '|' + geo(a).district.toLowerCase();
+const byBuilding = {};
+sale.forEach((x) => { (byBuilding[streetKey(x.address)] = byBuilding[streetKey(x.address)] || []).push(x); });
+for (const r of rows) {
+  const others = (byBuilding[streetKey(r.address)] || []).filter((x) => x.id !== r.id && x.area >= 20 && x.price >= 15000 && Math.abs(x.area - r.area) / r.area <= 0.4);
+  r.sameBuilding = others.map((x) => ({ price: x.price, area: x.area, perM2: Math.round(x.price / x.area), details: x.details, url: x.url, cond: CONDNAME[cond(x.details)] }));
+  r.sameN = others.length;
+  r.sameMedPerM2 = others.length ? Math.round(med(others.map((x) => x.price / x.area))) : null;
+  r.sameDisc = r.sameMedPerM2 ? 1 - r.perM2 / r.sameMedPerM2 : null;
+}
+// kvaliteedifilter: vähemalt 5 võrdlust ja allahindlus tõsiselt tõenäoline (alla 55%)
+const ok = rows.filter((x) => x.compN >= 4 && x.disc < 0.6);
+const tallinn = ok.filter((x) => x.city === 'Tallinn').sort((a, b) => b.disc - a.disc);
+const harju = ok.filter((x) => x.city !== 'Tallinn').sort((a, b) => b.disc - a.disc);
+fs.writeFileSync(path.join(D, 'fair_tallinn.json'), JSON.stringify(tallinn.slice(0, 30), null, 1));
+fs.writeFileSync(path.join(D, 'fair_harju.json'), JSON.stringify(harju.slice(0, 30), null, 1));
+console.log('hinnatud', rows.length, 'välja jäetud', skip, 'Tallinn', tallinn.length, 'Harju', harju.length);
+const show = (arr) => arr.slice(0, 15).forEach((x, i) => console.log(`${i + 1}) -${Math.round(x.disc * 100)}% (maja: ${x.sameN ? (x.sameDisc >= 0 ? '-' : '+') + Math.abs(Math.round(x.sameDisc * 100)) + '% vs ' + x.sameN + ' teist' : 'ei ole'}) | ${x.price}€ vs õiglane ${x.fairPrice}€ (${x.fairPerM2}€/m², ${x.compN} võrd., ${x.compLevel}) | ${x.area}m² | ${x.cond} | ${x.address.split(',').slice(0, 3).join(',')} | vanus ${x.ageDays}p | ${x.flags.join(';')} | ${x.url}`));
+console.log('\nTALLINN'); show(tallinn);
+console.log('\nHARJUMAA'); show(harju);
