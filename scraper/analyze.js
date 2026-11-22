@@ -27,6 +27,7 @@ const reuse = process.argv.includes('--reuse');
 const maxPriceArg = arg('--max-price');
 if (maxPriceArg) CFG.priceMax = +maxPriceArg;
 const nation = process.argv.includes('--nation'); // kogu Eesti lõdvendatud läbivaatus
+const exclCounty = arg('--exclude-county'); // nt --exclude-county Ida-Virumaa
 const cityArg = nation ? 'Eesti' : arg('--city'); // nt --city Tallinn: lõdvendatud läbivaatus, ei puutu notified.json ega report.json
 const TOP_N = 3; // max teavitusi päevas (tavapiirkonnad); Ida-Virumaa eraldi lõigus samuti kuni TOP_N
 
@@ -72,6 +73,7 @@ async function main() {
   const scored = [];
   for (const l of sale) {
     if (l.price > CFG.priceMax || l.area < CFG.minArea) continue;
+    if (exclCounty && l.county === exclCounty) continue;
     if (nation ? false : cityArg ? l.city !== cityArg : CFG.county && l.county !== CFG.county) continue;
     const text = `${l.details} ${l.title} ${l.note}`;
     if (CFG.stoveRe.test(text)) continue;
@@ -79,6 +81,7 @@ async function main() {
     if ((fl && +fl[1] <= 0) || /sokli|soklikorrus|keldri|kelder/i.test(`${l.details} ${l.title}`)) continue; // sokli-/keldrikorrus
     if (/kaks\s+(eraldiseisvat\s+)?korterit|kahe\s+korteri|korterid\s+koos|\d+\s+korterit\s+(ühe|koos)/i.test(`${l.title} ${l.note}`)) continue; // mitu korterit ühes pakkumises
     if (/kiire\s+ost|ostan\b|ostame\b|soovin\s+osta|ostan\s+korter|igas\s+seisukorras/i.test(`${l.title} ${l.note}`)) continue; // ostjapoolne kuulutus
+    if (/kaasomand/i.test(l.details)) continue; // kaasomandi osa, mitte terve korter
     if (l.price < CFG.minPrice || l.perM2 < CFG.minPerM2) continue;
     const r = estimate(rent, (x) => x.perM2, l, CFG.minComps);
     const m = estimate(sale, (x) => x.perM2, l, CFG.minComps + 2);
