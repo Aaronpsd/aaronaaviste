@@ -27,7 +27,7 @@ const stat = {};
 for (const x of sale) (stat[x.city] = stat[x.city] || { s: 0, r: 0 }).s++;
 for (const x of rent) (stat[x.city] = stat[x.city] || { s: 0, r: 0 }).r++;
 
-const DISTRICT = /kesklinn|linnaosa|ülejõe|^mai$|rannarajoon|annelinn|karlova|supilinn|tammelinn|ropka|variku|veeriku|vaksali|raadi|jaamamõisa|kvissental|kristiine|lasnamäe|mustamäe|nõmme|pirita|haabersti|põhja-tallinn|männimäe|port artur|rääma|pärnamäe|sauga|papsaare|uus-sauga|vana-pärnu|kitseküla|kadriorg|pelgulinn|merivälja|rocca|maardu|asum|elamurajoon/i;
+const DISTRICT = /kesklinn|linnaosa|ülejõe|^mai$|rannarajoon|annelinn|karlova|supilinn|tammelinn|ropka|variku|veeriku|vaksali|raadi|jaamamõisa|kvissental|kristiine|lasnamäe|mustamäe|^nõmme$|pirita|haabersti|põhja-tallinn|männimäe|port artur|rääma|pärnamäe|sauga|papsaare|uus-sauga|vana-pärnu|kitseküla|kadriorg|pelgulinn|merivälja|rocca|maardu|asum|elamurajoon/i;
 // ligikaudne kaugus Tallinnast (km maanteed); võtmed on sobitatud aadressiga
 const KM = [
   [/Tallinn/i, 0], [/Maardu/i, 17], [/Saue|Saku|Keila|Viimsi|Rae vald|Harku|, Jüri,|Jüri alevik|Kiili|Haabneeme/i, 22], [/Ämari|Lääne-Harju|Rummu|Kloogaranna|Harju-Risti/i, 45],
@@ -41,6 +41,7 @@ const isVillage = (a) => {
   const p = a.split(',').map((x) => x.trim());
   if (p.length < 4) return false;
   const loc = p[1];
+  if (/Kohtla-Järve/i.test(p[p.length - 2]) && /^(järve|ahtme|sompa|oru|kukruse)$/i.test(loc)) return false; // Kohtla-Järve linnaosad
   if (/\blinn$/i.test(loc) || DISTRICT.test(loc)) return false; // linn või linnaosa
   return stem(loc) !== stem(p[p.length - 2]);
 };
