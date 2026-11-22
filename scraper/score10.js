@@ -8,7 +8,7 @@ const rent = JSON.parse(fs.readFileSync(path.join(D, 'kv_rent.json'), 'utf8'));
 const cand = JSON.parse(fs.readFileSync(path.join(D, 'top_Eesti.json'), 'utf8'));
 const topN = +(process.argv[process.argv.indexOf('--top') + 1] || 30);
 
-const W = { yield: 0.30, cheap: 0.18, discount: 0.17, demand: 0.15, conf: 0.10, prox: 0.10 };
+const W = { yield: 0.30, cheap: 0.25, discount: 0.17, demand: 0.17, conf: 0.11 };
 const clamp = (v, a = 0, b = 10) => Math.max(a, Math.min(b, v));
 const med = (a) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const cityOf = (a) => { const p = a.split(',').map((s) => s.trim()); return p.length >= 3 ? p[p.length - 2] : p[p.length - 1]; };
@@ -67,7 +67,6 @@ for (const c of cand) {
     discount: clamp((c.discount / 0.5) * 10),
     demand: clamp(0.5 * Math.min(10, st.r / 12) + 0.5 * clamp(10 - 2 * ratio)),
     conf: clamp(0.5 * Math.min(10, c.rentN / 3) + 0.5 * clamp(10 - spread * 10)),
-    prox: clamp(10 * (1 - (kmFrom(c.address) - 30) / 220)),
   };
   const km = kmFrom(c.address);
   // karistus: ei luba kõrget skoori, kui võrdlus on liiga õhuke või kuulutus kahtlane

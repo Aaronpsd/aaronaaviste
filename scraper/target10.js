@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const rows = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'score10.json'), 'utf8'));
-const W = { yield: 0.30, cheap: 0.18, discount: 0.17, demand: 0.15, conf: 0.10, prox: 0.10 };
+const W = { yield: 0.30, cheap: 0.25, discount: 0.17, demand: 0.17, conf: 0.11 };
 const clamp = (v, a = 0, b = 10) => Math.max(a, Math.min(b, v));
 const MARKET = (r) => r.marketPerM2 * r.area; // turu mediaan selle suuruse kohta
 
@@ -55,6 +55,8 @@ const out = rows.map((r) => {
     ...r, t, price10, needDisc, room, realistic,
     scoreNow: r.total, scoreAtReal: score(r, realistic), scoreAt10: score(r, price10),
     price7: priceFor(r, 7.0),
+    price8: priceFor(r, 8.0),
+    price9: priceFor(r, 9.0),
     price65: priceFor(r, 6.5),
   };
 });
