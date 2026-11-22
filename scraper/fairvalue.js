@@ -6,6 +6,7 @@ const D = path.join(__dirname, '..', 'data');
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : d; };
 const topN = +arg('--top', 5);
 const NO_WOOD = process.argv.includes('--no-wood');
+const AREAS_EARLY = arg('--areas', null);
 const NEAR = process.argv.includes('--near'); // lähedus Tallinnale + õiglane hind alla piiri
 const MAX_KM = +arg('--max-km', 20);
 const MAX_FAIR = +arg('--max-fair', 100000);
@@ -23,14 +24,20 @@ const geo = (a) => {
   return { city: p[p.length - 1], district: p[p.length - 1] }; // 'Tänav, Maardu' -> asum = linn
 };
 sale.forEach((x) => { const g = geo(x.address); x.city = g.city; x.district = g.district; });
+const AREAS = arg('--areas', null); // nt Mustamäe,Kristiine: võrdlused linnaosa tasemel
+if (AREAS) {
+  const list = AREAS.split(',');
+  sale.forEach((x) => { const a = list.find((n) => new RegExp(n, 'i').test(x.address)); if (a) { x.sub = x.district; x.city = 'Tallinn'; x.district = a; } });
+}
 const med = (a) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const yearOf = (d) => { const m = /ehitusaasta\s+(\d{4})/i.exec(d || ''); return m ? +m[1] : null; };
 const era = (y) => (y === null ? null : y < 1960 ? 'a' : y < 1990 ? 'b' : y < 2010 ? 'c' : 'd');
 const floorOf = (d) => { const m = /Korrus\s+(-?\d+)\s*\//i.exec(d || ''); return m ? +m[1] : null; };
 const NEEDS = /vajab\s+(san\.?\s*)?(remon|reno|uuenda)|remonti\s+vajav|täielikku remonti|halvas/i;
 const RENOVATED = /renoveeritud|uus\s+remont|uuendatud|kapitaalselt|heas\s+(korras|seisukorras)|san\.?\s*remont\s+tehtud|valmis\s+(sisse|kolimiseks)|uus\s+(torustik|elektrisüsteem)|\buus\s*,/i;
-const cond = (d) => (NEEDS.test(d) ? 'N' : RENOVATED.test(d) ? 'R' : 'M');
-const CONDNAME = { N: 'vajab remonti', R: 'heas korras / renoveeritud', M: 'keskmine / teadmata' };
+const PREMIUM = /täielikult\s+(projekti|renov)|projekti\s+järgi|disain|luksus|kapitaalselt\s+renov|värskelt\s+renov|põhjalikult\s+renov|uus\s+köök|uue\s+köögi/i;
+const cond = (d, extra = '') => (NEEDS.test(d) ? 'N' : PREMIUM.test(`${d} ${extra}`) ? 'P' : RENOVATED.test(d) ? 'R' : 'M');
+const CONDNAME = { N: 'vajab remonti', R: 'heas korras / renoveeritud', M: 'keskmine / teadmata', P: 'täielikult/projekti järgi renoveeritud' };
 const maxId = Math.max(...sale.map((x) => +x.id));
 const ageDays = (l) => Math.round((maxId - +l.id) / 500);
 const STOVE = /ahi-?k[üu]t|ahjuk[üu]t|ahjuk[üu]te|ahjud?\b|puuk[üu]te|puuk[üu]tte|kaminak[üu]t|puuahi|ahjuga|ahi\b/i;
@@ -55,9 +62,10 @@ const compPool = sale.filter((x) => !(NO_WOOD && WOOD.test(x.details)) && !/sokl
 function fair(l) {
   const sizeOK = (x) => Math.abs(x.area - l.area) / l.area <= 0.25;
   const eraOK = (x) => era(yearOf(x.details)) === null || era(yearOf(l.details)) === null || era(yearOf(x.details)) === era(yearOf(l.details));
-  const sameCond = (x) => cond(x.details) === cond(l.details);
+  const sameCond = (x) => cond(x.details, `${x.title} ${x.note}`) === cond(l.details, `${l.title} ${l.note}`);
   const base = compPool.filter((x) => x.id !== l.id && sizeOK(x) && eraOK(x));
   const tries = [
+    ...(AREAS && l.sub ? [[base.filter((x) => x.sub === l.sub && x.district === l.district && sameCond(x)), 'alamasum+suurus+seisukord', 5]] : []),
     [base.filter((x) => x.district === l.district && x.city === l.city && sameCond(x)), 'asum+suurus+seisukord', 4],
     ...(NEAR ? [[base.filter((x) => x.city === l.city && sameCond(x)), 'vald+suurus+seisukord', 8]] : []),
   ];
@@ -81,7 +89,7 @@ for (const l of sale) {
   const disc = 1 - l.price / fairPrice;
   rows.push({
     id: l.id, url: l.url, address: l.address, city: l.city, district: l.district, area: l.area, rooms: l.rooms, price: l.price, perM2: Math.round(l.price / l.area),
-    details: l.details, title: l.title, note: l.note, cond: CONDNAME[cond(l.details)], ageDays: ageDays(l),
+    details: l.details, title: l.title, note: l.note, cond: CONDNAME[cond(l.details, `${l.title} ${l.note}`)], ageDays: ageDays(l),
     fairPerM2: Math.round(f.perM2), fairPrice, disc, saving: fairPrice - l.price, compN: f.n, compLevel: f.level, compMedAge: Math.round(f.medAge),
     comps: [...f.comps].sort((a, b) => Math.abs(a.area - l.area) - Math.abs(b.area - l.area)).slice(0, 3).map((x) => ({ price: x.price, area: x.area, perM2: Math.round(x.price / x.area), addr: x.address.split(',').slice(0, 3).join(','), url: x.url, details: x.details })),
     flags: [],
@@ -188,4 +196,19 @@ if (process.argv.includes('--rate')) {
   fs.writeFileSync(path.join(D, MAX_PRICE ? 'tallinn_rated_price.json' : 'tallinn_rated.json'), JSON.stringify(out, null, 1));
   console.log('\nTALLINN (ilma Lasnamäeta, puitmajadeta, sokliteta; õiglane hind <=' + MAX_FAIR + '):', out.length);
   out.slice(0, 20).forEach((x, i) => console.log(`${i + 1}) ${x.score.toFixed(1)} | ${x.price}€ vs õiglane ${x.fairPrice}€ -${Math.round(x.disc * 100)}% | ${x.area}m² | üür ~${x.rent} (${x.rentN}) neto ${(x.net * 100).toFixed(1)}% | 8: ${x.price8 ?? '-'} 9: ${x.price9 ?? '-'} | max ${x.maxScore.toFixed(1)} | ${x.address.split(',').slice(0, 3).join(',')} | ${x.cond} | ${x.ageDays}p | ${x.url}`));
+}
+
+if (AREAS) {
+  const list = AREAS.split(',');
+  const sameKey = (a) => parts(a)[0].toLowerCase().replace(/[-\/]\s*\d+.*$/, '').replace(/\s+/g, ' ').trim();
+  const res = rows.filter((x) => list.includes(x.district)).map((x) => {
+    const m3 = med(x.comps.map((c) => c.perM2));
+    return { ...x, disc3: 1 - x.perM2 / m3, avg: (x.disc + (1 - x.perM2 / m3)) / 2, linnaosa: x.district };
+  }).filter((x) => x.compN >= 6 && x.disc > 0 && x.disc < 0.55 && !/enampakkumi|kohtutäitur/i.test(`${x.title} ${x.note}`)).sort((a, b) => b.avg - a.avg);
+  fs.writeFileSync(path.join(D, 'areas_rows.json'), JSON.stringify(res.slice(0, 40), null, 1));
+  for (const a of list) {
+    const r = res.filter((x) => x.linnaosa === a);
+    console.log(`\n${a.toUpperCase()}: ${r.length} kandidaati`);
+    r.slice(0, 12).forEach((x, i) => console.log(`${i + 1}) mudel -${Math.round(x.disc * 100)}% / 3 lähimat -${Math.round(x.disc3 * 100)}% | ${x.price}€ vs õiglane ${x.fairPrice}€ (${x.compN} võrd.) | ${x.area}m² ${x.rooms}t | ${x.cond} | maja ${x.sameN ? Math.round((x.sameDisc || 0) * 100) + '%(' + x.sameN + ')' : '-'} | ${x.address.split(',').slice(0, 3).join(',')} | ${x.ageDays}p | ${x.flags.join(';')} | ${x.url}`));
+  }
 }
