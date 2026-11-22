@@ -1,0 +1,72 @@
+{
+ "Kesklinn": {
+  "n": 16,
+  "talv": 77,
+  "kevad": 95,
+  "suvi": 90,
+  "collected": "2026-11-22"
+ },
+ "Kristiine": {
+  "n": 12,
+  "talv": 57.5,
+  "kevad": 61.5,
+  "suvi": 71,
+  "collected": "2026-11-22"
+ },
+ "Mustamäe": {
+  "n": 6,
+  "talv": 61.5,
+  "kevad": 60,
+  "suvi": 69,
+  "collected": "2026-11-22"
+ },
+ "Põhja-Tallinn": {
+  "n": 22,
+  "talv": 61,
+  "kevad": 77.5,
+  "suvi": 89,
+  "collected": "2026-11-22"
+ },
+ "Pirita": {
+  "n": 5,
+  "talv": 80,
+  "kevad": 80,
+  "suvi": 86,
+  "collected": "2026-11-22"
+ },
+ "Haabersti": {
+  "n": 8,
+  "talv": 54,
+  "kevad": 57.5,
+  "suvi": 92,
+  "collected": "2026-11-22"
+ },
+ "Nõmme": {
+  "n": 9,
+  "talv": 83,
+  "kevad": 86,
+  "suvi": 80,
+  "collected": "2026-11-22"
+ },
+ "Lasnamäe": {
+  "n": 16,
+  "talv": 51,
+  "kevad": 61,
+  "suvi": 96,
+  "collected": "2026-11-22"
+ },
+ "Tartu": {
+  "n": 26,
+  "talv": 74,
+  "kevad": 74,
+  "suvi": 77,
+  "collected": "2026-11-22"
+ },
+ "Pärnu": {
+  "n": 23,
+  "talv": 86,
+  "kevad": 93,
+  "suvi": 135,
+  "collected": "2026-11-22"
+ }
+}
