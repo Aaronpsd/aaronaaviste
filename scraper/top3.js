@@ -23,7 +23,7 @@ const BASE = {
   directMonths: 2.5, directMinDisc: 0.20,
   flipMinProfit: 12000, flipMinPct: 0.15,
   saleDiscount: 0.04, // tehinguhind alla küsitud hinna
-  megaDirectDisc: 0.30, megaFlipProfit: 25000, megaFlipPct: 0.25, megaLT: 0.07, megaST: 0.10,
+  megaSTParnu: 0.12, megaDirectDisc: 0.30, megaFlipProfit: 25000, megaFlipPct: 0.25, megaLT: 0.07, megaST: 0.10,
   rentMult: 1, saleMult: 1, renoMult: 1,
 };
 const P = { ...BASE };
@@ -63,12 +63,14 @@ const STOVE = /ahi-?k[üu]t|ahjuk[üu]t|ahjuk[üu]te|ahjud?\b|puuk[üu]te|puuk[�
 const WOOD = /puitmaja|palkmaja|puidust|puit\b/i;
 const med = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 
+const harjuIds = new Set(read('kv_sale_harju.json', []).map((x) => String(x.id)));
 const sale = new Map();
 for (const x of rawSale) {
   const g = geo(x.address);
   const o = { ...x, id: String(x.id), ...g, cond: cond(x.details, `${x.title} ${x.note}`), year: yearOf(x.details), floor: floorOf(x.details) };
   if (!o.county && g.city === 'Tallinn') o.county = 'Harjumaa';
   if (!o.county && x.county) o.county = x.county;
+  if (!o.county && harjuIds.has(o.id)) o.county = 'Harjumaa'; // Harjumaa kraapimisel puudub aadressil maakonnatäht
   sale.set(o.id, o);
 }
 const saleAll = [...sale.values()];
@@ -295,7 +297,7 @@ function megaDeals(ev) {
   const res = [];
   const fresh = (x) => x.ageDays <= 30; // ainult värsked kuulutused: igapäevane teavitus
   for (const x of ev.lt) if (fresh(x) && x.conf === 'kõrge' && x.riskAdj >= P.megaLT) res.push({ x, strategy: 'Pikaajaline üür', main: `risk. korr. netotootlus ${(x.riskAdj * 100).toFixed(1)}%`, key: x.riskAdj });
-  for (const x of ev.st) if (fresh(x) && x.conf === 'kõrge' && x.riskAdj >= P.megaST) res.push({ x, strategy: 'Lühiajaline üür', main: `risk. korr. netotootlus ${(x.riskAdj * 100).toFixed(1)}%`, key: x.riskAdj });
+  for (const x of ev.st) if (fresh(x) && x.conf === 'kõrge' && x.riskAdj >= (x.m.area === 'Pärnu' ? P.megaSTParnu : P.megaST)) res.push({ x, strategy: 'Lühiajaline üür', main: `risk. korr. netotootlus ${(x.riskAdj * 100).toFixed(1)}%`, key: x.riskAdj });
   for (const x of ev.flip) if (fresh(x) && x.ok && confOK(x) && x.m.net >= P.megaFlipProfit && x.m.pct >= P.megaFlipPct) res.push({ x, strategy: 'Flip', main: `puhaskasum ${Math.round(x.m.net).toLocaleString('et-EE')} €`, key: x.m.net / 100000 });
   for (const x of ev.direct) if (fresh(x) && x.ok && x.conf === 'kõrge' && x.disc >= P.megaDirectDisc && URGENT.test(`${x.title} ${x.note}`)) res.push({ x, strategy: 'Otse edasimüük', main: `${(x.disc * 100).toFixed(0)}% alla turuväärtuse, puhaskasum ${Math.round(x.m.net).toLocaleString('et-EE')} €`, key: x.disc });
   return res.sort((a, b) => b.key - a.key);
