@@ -5,6 +5,13 @@ const path = require('path');
 const D = path.join(__dirname, '..', 'data');
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : d; };
 const topN = +arg('--top', 5);
+const NO_WOOD = process.argv.includes('--no-wood');
+const NEAR = process.argv.includes('--near'); // lähedus Tallinnale + õiglane hind alla piiri
+const MAX_KM = +arg('--max-km', 20);
+const MAX_FAIR = +arg('--max-fair', 100000);
+const MAX_PRICE = +arg('--max-price', 0); // küsitava hinna ülempiir (0 = ei piira)
+const ONLY_CITY = arg('--city', null);
+const WOOD = /puitmaja|palkmaja|puidust|puit\b/i;
 
 const sale = JSON.parse(fs.readFileSync(path.join(D, 'kv_sale_harju.json'), 'utf8'));
 const parts = (a) => a.split(',').map((s) => s.trim()).filter(Boolean);
@@ -13,7 +20,7 @@ const geo = (a) => {
   const ti = p.findIndex((x) => /^Tallinn$/i.test(x));
   if (ti > 0) return { city: 'Tallinn', district: p[ti - 1] };
   if (p.length >= 3) return { city: p[p.length - 1].replace(/,?\s*Harjumaa$/i, ''), district: p[1] };
-  return { city: p[p.length - 1], district: p[0] };
+  return { city: p[p.length - 1], district: p[p.length - 1] }; // 'Tänav, Maardu' -> asum = linn
 };
 sale.forEach((x) => { const g = geo(x.address); x.city = g.city; x.district = g.district; });
 const med = (a) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
@@ -33,6 +40,7 @@ function excluded(l) {
   const fl = floorOf(l.details);
   if (l.area < 25 || l.price < 15000 || l.price / l.area < 300) return 'hind/pindala';
   if (STOVE.test(text)) return 'ahiküte';
+  if (NO_WOOD && WOOD.test(l.details)) return 'puitmaja';
   if ((fl !== null && fl <= 0) || /sokli|keldri|kelder/i.test(`${l.details} ${l.title}`)) return 'sokkel';
   if (/kaasomand/i.test(l.details) || /kaks\s+(eraldiseisvat\s+)?korterit|kahe\s+korteri|korterid\s+koos/i.test(`${l.title} ${l.note}`)) return 'kaasomand/mitu';
   if (/kiire\s+ost|ostan\b|ostame\b|soovin\s+osta|igas\s+seisukorras/i.test(`${l.title} ${l.note}`)) return 'ostjapoolne';
@@ -42,7 +50,7 @@ function excluded(l) {
 }
 
 const pool = sale.filter((x) => !excluded(x) || true); // võrdlusbaas: kõik kuulutused
-const compPool = sale.filter((x) => !/sokli|keldri|kelder/i.test(`${x.details} ${x.title}`) && !/kaasomand/i.test(x.details) && x.price >= 15000 && x.area >= 20 && !/uusarendus|broneeri|valmib\s+20(2[6-9])|esimesed majad/i.test(`${x.title} ${x.note}`) && (yearOf(x.details) || 0) < 2025);
+const compPool = sale.filter((x) => !(NO_WOOD && WOOD.test(x.details)) && !/sokli|keldri|kelder/i.test(`${x.details} ${x.title}`) && !/kaasomand/i.test(x.details) && x.price >= 15000 && x.area >= 20 && !/uusarendus|broneeri|valmib\s+20(2[6-9])|esimesed majad/i.test(`${x.title} ${x.note}`) && (yearOf(x.details) || 0) < 2025);
 
 function fair(l) {
   const sizeOK = (x) => Math.abs(x.area - l.area) / l.area <= 0.25;
@@ -51,6 +59,7 @@ function fair(l) {
   const base = compPool.filter((x) => x.id !== l.id && sizeOK(x) && eraOK(x));
   const tries = [
     [base.filter((x) => x.district === l.district && x.city === l.city && sameCond(x)), 'asum+suurus+seisukord', 4],
+    ...(NEAR ? [[base.filter((x) => x.city === l.city && sameCond(x)), 'vald+suurus+seisukord', 8]] : []),
   ];
   for (const [arr, lvl, minN] of tries) {
     if (arr.length >= minN) {
@@ -106,3 +115,25 @@ console.log('hinnatud', rows.length, 'välja jäetud', skip, 'Tallinn', tallinn.
 const show = (arr) => arr.slice(0, 15).forEach((x, i) => console.log(`${i + 1}) -${Math.round(x.disc * 100)}% (maja: ${x.sameN ? (x.sameDisc >= 0 ? '-' : '+') + Math.abs(Math.round(x.sameDisc * 100)) + '% vs ' + x.sameN + ' teist' : 'ei ole'}) | ${x.price}€ vs õiglane ${x.fairPrice}€ (${x.fairPerM2}€/m², ${x.compN} võrd., ${x.compLevel}) | ${x.area}m² | ${x.cond} | ${x.address.split(',').slice(0, 3).join(',')} | vanus ${x.ageDays}p | ${x.flags.join(';')} | ${x.url}`));
 console.log('\nTALLINN'); show(tallinn);
 console.log('\nHARJUMAA'); show(harju);
+
+// ===== lähedus Tallinnale (ligikaudne maanteekaugus km) =====
+const KM = [
+  [/^Tallinn$/i, 0], [/Maardu/i, 17], [/Haabneeme|Viimsi|Püünsi|Pirita|Pringi|Lubja|Randvere|Haabneeme|Miiduranna|Rohuneeme|Muuga|Kelvingi|Metsakasti/i, 14],
+  [/Peetri|Jüri|Assaku|Rae vald|Lagedi|Kulna|Rae,|Vaida|Mäo|Patika|Järveküla|Veskitaguse|Kopli/i, 14], [/Laagri|Saue vald|Tänassilma|Urda|Kasemetsa|Kütise|Haiba|Ääsmäe|Saue linn|Nehatu/i, 99], // Saue valla täpne kaugus eraldi allpool
+  [/Saku|Kiisa|Tammemäe|Kurtna|Metsanurga|Männiku|Roobuka|Rahula|Saku vald/i, 99], [/Kiili|Kangru|Luige|Sausti|Mõisaküla|Kiili vald/i, 99],
+  [/Tabasalu|Harku|Rannamõisa|Muraste|Kumna|Naage|Laabi|Harku vald/i, 99], [/Loo alevik|Jõelähtme|Kostivere|Maardu|Iru|Ülgase|Jõelähtme vald/i, 99],
+];
+const KMS = { Laagri: 12, Peetri: 10, Jüri: 15, Assaku: 12, Lagedi: 15, Saku: 19, Kiili: 18, Tabasalu: 16, Harku: 14, Rannamõisa: 14, Viimsi: 12, Haabneeme: 12, Püünsi: 12, Maardu: 17, Loo: 18, Jõelähtme: 20, Kostivere: 25, Saue: 21, Keila: 28, Kehra: 40, Paldiski: 52, Aruküla: 30, Kose: 40, Vääna: 24, Kumna: 16, Muraste: 14, Rummu: 40, Laitse: 35, Riisipere: 40, Turba: 30, Haiba: 28, Kurtna: 17, Nõmme: 8 };
+function kmOf(l) {
+  if (l.city === 'Tallinn') return 0;
+  const hay = `${l.district}, ${l.city}`; // ainult asula/linn/vald, mitte tänav
+  for (const [k, v] of Object.entries(KMS)) if (new RegExp('(^|[ ,])' + k + '([ ,]|$)', 'i').test(hay)) return v;
+  return 99;
+}
+if (NEAR) {
+  const cands = rows.filter((x) => x.compN >= 4 && x.disc > 0 && x.disc < 0.6 && (MAX_PRICE ? x.price <= MAX_PRICE : x.fairPrice < MAX_FAIR) && (ONLY_CITY ? x.city === ONLY_CITY : kmOf(x) <= MAX_KM))
+    .map((x) => ({ ...x, km: kmOf(x) })).sort((a, b) => b.disc - a.disc);
+  fs.writeFileSync(path.join(D, 'fair_near.json'), JSON.stringify(cands.slice(0, 40), null, 1));
+  console.log(`\nLÄHEDAL (<=${MAX_KM} km, õiglane hind <${MAX_FAIR}, ei puitmaja/ahi/sokkel): ${cands.length}`);
+  cands.slice(0, 20).forEach((x, i) => console.log(`${i + 1}) -${Math.round(x.disc * 100)}% | ${x.price}€ vs õiglane ${x.fairPrice}€ (${x.compN} võrd.) | ${x.km}km | ${x.area}m² | ${x.cond} | ${x.address.split(',').slice(0, 3).join(',')} | ${x.ageDays}p | ${x.flags.join(';')} | ${x.url}`));
+}

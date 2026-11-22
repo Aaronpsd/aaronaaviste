@@ -10,3 +10,5 @@ data/flip.json
 data/kv_sale_harju.json
 data/flip_near.json
 data/fair_*.json
+data/fair_near*.json
+data/fair_t100.json
