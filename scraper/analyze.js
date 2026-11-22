@@ -5,6 +5,7 @@ const path = require('path');
 const { scrape } = require('./kv');
 
 const CFG = {
+  county: 'Harjumaa', // ainult see maakond (null = kogu Eesti)
   priceMax: 80000,
   minArea: 30,
   minGross: 0.09, // "selge diil": brutotootlus
@@ -67,8 +68,13 @@ async function main() {
   const scored = [];
   for (const l of sale) {
     if (l.price > CFG.priceMax || l.area < CFG.minArea) continue;
+    if (CFG.county && l.county !== CFG.county) continue;
     const text = `${l.details} ${l.title} ${l.note}`;
     if (CFG.stoveRe.test(text)) continue;
+    const fl = /Korrus\s+(-?\d+)\s*\//i.exec(l.details);
+    if ((fl && +fl[1] <= 0) || /sokli|soklikorrus|keldri|kelder/i.test(`${l.details} ${l.title}`)) continue; // sokli-/keldrikorrus
+    if (/kaks\s+(eraldiseisvat\s+)?korterit|kahe\s+korteri|korterid\s+koos|\d+\s+korterit\s+(ühe|koos)/i.test(`${l.title} ${l.note}`)) continue; // mitu korterit ühes pakkumises
+    if (/kiire\s+ost|ostan\b|ostame\b|soovin\s+osta|ostan\s+korter|igas\s+seisukorras/i.test(`${l.title} ${l.note}`)) continue; // ostjapoolne kuulutus
     if (l.price < CFG.minPrice || l.perM2 < CFG.minPerM2) continue;
     const r = estimate(rent, (x) => x.perM2, l, CFG.minComps);
     const m = estimate(sale, (x) => x.perM2, l, CFG.minComps + 2);
