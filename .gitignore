@@ -2,3 +2,4 @@ node_modules/
 data/kv_sale.json
 data/kv_rent.json
 data/report.json
+data/top_*.json
