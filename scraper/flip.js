@@ -6,7 +6,9 @@ const D = path.join(__dirname, '..', 'data');
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : d; };
 
 const CFG = {
-  maxPurchase: 80000, // laenu ülempiir = ostuhinna ülempiir
+  maxPurchase: +arg('--max-purchase', 100000), // ostuhinna ülempiir
+  maxLoan: 80000, // laenu ülempiir
+  ownCap: +arg('--own-cap', 20000), // oma raha (ostuhinna laenuväline osa + remont + kulud + intress)
   maxReno: 20000, // oma raha remondiks
   minProfit: +arg('--min-profit', 10000), // puhaskasum pärast tulumaksu
   minArea: 25,
@@ -31,7 +33,16 @@ const sale = JSON.parse(fs.readFileSync(path.join(D, 'kv_sale_harju.json'), 'utf
 const med = (a) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const pctl = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
 const parts = (a) => a.split(',').map((s) => s.trim()).filter(Boolean);
-const districtOf = (a) => { const p = parts(a); return p.length >= 4 ? p[1] : p[p.length - 2] || p[0]; };
+// aadress: 'Tänav, asum, linnaosa, Tallinn' või 'Tänav, asula, vald' (maakond võib puududa)
+const geo = (a) => {
+  const p = parts(a);
+  const ti = p.findIndex((x) => /^Tallinn$/i.test(x));
+  if (ti > 0) return { city: 'Tallinn', district: p[ti - 1] };
+  if (p.length >= 3) return { city: p[p.length - 1].replace(/,?\s*Harjumaa$/i, ''), district: p[1] };
+  return { city: p[p.length - 1], district: p[0] };
+};
+const districtOf = (a) => geo(a).district;
+sale.forEach((x) => { const g = geo(x.address); x.city = g.city; x.district = g.district; });
 const yearOf = (d) => { const m = /ehitusaasta\s+(\d{4})/i.exec(d || ''); return m ? +m[1] : null; };
 const era = (y) => (y === null ? null : y < 1960 ? 'a' : y < 1990 ? 'b' : y < 2010 ? 'c' : 'd');
 const floorOf = (d) => { const m = /Korrus\s+(-?\d+)\s*\//i.exec(d || ''); return m ? +m[1] : null; };
@@ -53,17 +64,19 @@ function renoPerM2(l) {
 
 // ARV: renoveeritud sarnased korterid (sama linnaosa/linn, suurus ±25%, sama ehitusaja klass)
 function arv(l) {
-  const dist = districtOf(l.address);
+  const dist = l.district;
   const c0 = sale.filter((x) => x.id !== l.id && x.price >= 20000 && RENOVATED.test(x.details) && !NEEDS.test(x.details) && !/sokli|keldri|kelder/i.test(`${x.details} ${x.title}`) && !/kaasomand/i.test(x.details));
   const sizeOK = (x) => Math.abs(x.area - l.area) / l.area <= 0.25;
   const eraOK = (x) => era(yearOf(x.details)) === null || era(yearOf(l.details)) === null || era(yearOf(x.details)) === era(yearOf(l.details));
+  const local = (x) => x.district === dist && x.city === l.city;
   const tries = [
-    [c0.filter((x) => districtOf(x.address) === dist && x.city === l.city && sizeOK(x) && eraOK(x)), 'linnaosa+suurus'],
-    [c0.filter((x) => x.city === l.city && sizeOK(x) && eraOK(x)), 'linn+suurus'],
-    [c0.filter((x) => x.county === l.county && sizeOK(x) && eraOK(x) && /Tallinn/.test(l.city) === /Tallinn/.test(x.city)), 'maakond+suurus'],
+    [c0.filter((x) => local(x) && sizeOK(x) && eraOK(x)), 'kohalik+suurus+ehitusaeg'],
+    [c0.filter((x) => local(x) && sizeOK(x)), 'kohalik+suurus'],
+    // Tallinnas on turg piisavalt ühtlane linna tasemel; mujal (külad, vallad) varuvarianti ei kasutata
+    ...(/^Tallinn$/.test(l.city) ? [[c0.filter((x) => x.city === 'Tallinn' && sizeOK(x) && eraOK(x)), 'Tallinn+suurus+ehitusaeg']] : []),
   ];
   for (const [arr, lvl] of tries) {
-    if (arr.length >= CFG.minComps) {
+    if (arr.length >= (lvl.startsWith('kohalik') ? 3 : CFG.minComps)) {
       const perM2 = arr.map((x) => x.price / x.area);
       const m = pctl(perM2, 0.4); // konservatiivne: 40. protsentiil
       return { perM2: m * CFG.arvHaircut, rawMed: med(perM2), n: arr.length, level: lvl, comps: arr, medAge: med(arr.map(ageDays)) };
@@ -86,7 +99,9 @@ function evaluate(l) {
   const a = arv(l);
   if (!a) return { skip: 'ARV võrdlusi liiga vähe' };
   const arvPrice = Math.round(a.perM2 * l.area);
-  const loan = Math.min(l.price, 80000);
+  if (arvPrice > (l.price + reno) * 1.9) return { skip: 'ARV kahtlane (>1,9x kulust)' };
+  if (a.perM2 > (l.price / l.area) * 2.2) return { skip: 'ARV kahtlane (>2,2x hinnast m² kohta)' };
+  const loan = Math.min(l.price, CFG.maxLoan);
   const interest = Math.round(loan * CFG.loanRate * CFG.months / 12);
   const buyCosts = Math.round(l.price * CFG.buyCosts + loan * CFG.loanFee);
   const hold = CFG.holdPerMonth * CFG.months;
@@ -97,12 +112,16 @@ function evaluate(l) {
   const net = gross - tax;
   const invested = l.price + reno + buyCosts + hold; // koguinvesteering (enne laenu)
   const own = Math.max(0, l.price - loan) + reno + buyCosts + hold + interest; // oma raha
+  if (own > CFG.ownCap) return { skip: 'oma raha üle 20 000 €' };
   const rule70 = (l.price + reno) / arvPrice; // 70% reegel
   const slow = a.medAge > 120;
+  // MAO: maksimaalne ostuhind, mille juures puhaskasum = minProfit (intress ja ostukulud sõltuvad hinnast: ~0,032 x hind)
+  const fixed = reno + hold + saleCosts + CFG.minProfit / (1 - CFG.taxRate);
+  const mao = Math.round((arvPrice - fixed) / (1 + (CFG.loanRate * CFG.months) / 12 + CFG.buyCosts + CFG.loanFee));
   return {
     id: l.id, url: l.url, address: l.address, city: l.city, area: l.area, rooms: l.rooms, price: l.price, perM2: Math.round(l.price / l.area), details: l.details, title: l.title,
     renoCls: r.cls, reno, arvPerM2: Math.round(a.perM2), arvRaw: Math.round(a.rawMed), arvPrice, compN: a.n, compLevel: a.level, compMedAge: Math.round(a.medAge),
-    interest, buyCosts, hold, saleCosts, totalCost, gross, tax, net, roiOwn: own > 0 ? net / own : null, roiCost: net / totalCost, rule70, own, slow,
+    interest, buyCosts, hold, saleCosts, totalCost, gross, tax, net, roiOwn: own > 0 ? net / own : null, roiCost: net / totalCost, rule70, own, slow, mao, maoDiscount: 1 - mao / l.price,
     ageDays: ageDays(l), comps: a.comps.sort((x, y) => Math.abs(x.area - l.area) - Math.abs(y.area - l.area)).slice(0, 3).map((x) => ({ price: x.price, area: x.area, perM2: Math.round(x.price / x.area), addr: x.address.split(',').slice(0, 3).join(','), url: x.url, details: x.details })),
   };
 }
@@ -119,4 +138,9 @@ good.sort((a, b) => b.rankScore - a.rankScore);
 fs.writeFileSync(path.join(D, 'flip.json'), JSON.stringify(good, null, 1));
 console.log('kõik', sale.length, 'hinnatud', ok.length, 'kasum >=', CFG.minProfit, ':', good.length);
 console.log('välja jäetud:', skipped);
+const near = ok.filter((x) => x.net < CFG.minProfit && x.mao > 0).sort((a, b) => a.maoDiscount - b.maoDiscount);
+fs.writeFileSync(path.join(D, 'flip_near.json'), JSON.stringify(near.slice(0, 40), null, 1));
+console.log('\nLÄHEDASED (kasum alla piiri, vajalik allahindlus MAO-ni):');
+near.slice(0, 15).forEach((x, i) => console.log(`${i + 1}) neto ${x.net}€ | küsitakse ${x.price} → MAO ${x.mao} (-${Math.round(x.maoDiscount * 100)}%) | remont ${x.reno} (${x.renoCls}) ARV ${x.arvPrice} (${x.compN} võrd., ${x.compLevel}) | ${x.area}m² | ${x.address.split(',').slice(0, 3).join(',')} | ${x.url}`));
+console.log('\nTOP:');
 good.slice(0, +arg('--top', 15)).forEach((x, i) => console.log(`${i + 1}) neto ${x.net}€ bruto ${x.gross}€ | ost ${x.price} + remont ${x.reno} (${x.renoCls}) → ARV ${x.arvPrice} (${x.arvPerM2}€/m², ${x.compN} võrd., ${x.compLevel}, med.vanus ${x.compMedAge}p) | 70%-reegel ${(x.rule70 * 100).toFixed(0)}% | ${x.area}m² | ${x.address.split(',').slice(0, 3).join(',')} | ${x.url}`));
