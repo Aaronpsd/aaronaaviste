@@ -26,7 +26,8 @@ const maxPages = +(arg('--max-pages') || 60);
 const reuse = process.argv.includes('--reuse');
 const maxPriceArg = arg('--max-price');
 if (maxPriceArg) CFG.priceMax = +maxPriceArg;
-const cityArg = arg('--city'); // nt --city Tallinn: lõdvendatud läbivaatus, ei puutu notified.json ega report.json
+const nation = process.argv.includes('--nation'); // kogu Eesti lõdvendatud läbivaatus
+const cityArg = nation ? 'Eesti' : arg('--city'); // nt --city Tallinn: lõdvendatud läbivaatus, ei puutu notified.json ega report.json
 const TOP_N = 3; // max teavitusi päevas (tavapiirkonnad); Ida-Virumaa eraldi lõigus samuti kuni TOP_N
 
 const median = (a) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
@@ -71,7 +72,7 @@ async function main() {
   const scored = [];
   for (const l of sale) {
     if (l.price > CFG.priceMax || l.area < CFG.minArea) continue;
-    if (cityArg ? l.city !== cityArg : CFG.county && l.county !== CFG.county) continue;
+    if (nation ? false : cityArg ? l.city !== cityArg : CFG.county && l.county !== CFG.county) continue;
     const text = `${l.details} ${l.title} ${l.note}`;
     if (CFG.stoveRe.test(text)) continue;
     const fl = /Korrus\s+(-?\d+)\s*\//i.exec(l.details);
@@ -97,7 +98,7 @@ async function main() {
   scored.sort((a, b) => b.gross - a.gross);
   if (cityArg) {
     const rank = (x) => x.net + (x.discount ?? 0) * 0.15;
-    const top = scored.filter((x) => x.rentLevel === 'linn+suurus' && x.rentN >= 6 && !x.suspicious).sort((a, b) => rank(b) - rank(a)).slice(0, 10);
+    const top = scored.filter((x) => x.rentLevel === 'linn+suurus' && x.rentN >= 6 && !x.suspicious).sort((a, b) => rank(b) - rank(a)).slice(0, nation ? 2000 : 10);
     fs.writeFileSync(path.join(DATA, `top_${cityArg}.json`), JSON.stringify(top, null, 1));
     console.log(`${cityArg}: hinnatud ${scored.length}, top ${top.length}`);
     return;
