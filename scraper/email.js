@@ -12,7 +12,8 @@ for (const [title, arr] of sections) {
   for (const x of arr) {
   lines.push(
     `${x.address}`,
-    `  Hind ${x.price.toLocaleString('et-EE')} € · ${x.area} m² · ${x.rooms ?? '?'} tuba · ${x.perM2} €/m² (turg ${x.marketPerM2 ?? '?'} €/m², ${x.discount !== null ? '-' + Math.round(x.discount * 100) + '%' : '?'})`,
+    `  Hind ${x.price.toLocaleString('et-EE')} € · ${x.area} m² · ${x.rooms ?? '?'} tuba · ${x.perM2} €/m² (piirkonna mediaan ${x.marketPerM2 ?? '?'} €/m²)`,
+    `  Hinnang ${x.discount !== null ? '-' + Math.round(x.discount * 100) + '%' : '?'} turust`,
     `  Hinnanguline üür ~${x.rentEst} €/kuus (${x.rentN} võrdlust, ${x.rentLevel}) · brutotootlus ${pct(x.gross)} · neto ~${pct(x.net)}`,
     `  ${x.details}`,
     `  ${x.url}`,
