@@ -30,7 +30,7 @@ function parsePage() {
   });
 }
 
-async function scrape({ dealType, priceMax, maxPages = 60, delayMs = 1500, log = console.log }) {
+async function scrape({ dealType, priceMax, county, maxPages = 60, delayMs = 1500, log = console.log }) {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ locale: 'et-EE', userAgent: UA });
   const page = await ctx.newPage();
@@ -40,6 +40,7 @@ async function scrape({ dealType, priceMax, maxPages = 60, delayMs = 1500, log =
     const base = dealType === 1 ? '/korterid-muuk' : '/korterid-uur';
     const params = [];
     if (priceMax) params.push(`price_max=${priceMax}`);
+    if (county) params.push(`county=${county}`); // 1 = Harjumaa (sh Tallinn), 12 = Tartumaa jne
     if (p > 1) params.push(`start=${(p - 1) * 50}`);
     const url = `https://www.kv.ee${base}${params.length ? '?' + params.join('&') : ''}`;
     let items = [];
