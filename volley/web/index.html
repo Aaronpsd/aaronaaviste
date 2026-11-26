@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="et">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Võrkpalli kalender</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1b1f24;--mut:#667;--line:#e2e5ea;--acc:#0b6bcb;--sand:#f5e3b3}
+@media (prefers-color-scheme:dark){:root{--bg:#14171b;--card:#1d2127;--fg:#e8eaed;--mut:#9aa3ad;--line:#2d333b;--acc:#5aa7ff;--sand:#4a3f1f}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,sans-serif}
+main{max-width:900px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:0 0 4px}.sub{color:var(--mut);font-size:.85rem;margin-bottom:12px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.filters select{padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit}
+.month{font-weight:600;margin:20px 0 8px;text-transform:capitalize}
+.ev{display:grid;grid-template-columns:64px 1fr;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px}
+.day{text-align:center;background:var(--sand);border-radius:8px;padding:6px 0}
+.day b{display:block;font-size:1.4rem;line-height:1}.day span{font-size:.75rem;text-transform:uppercase}
+.t{font-weight:600}.meta{color:var(--mut);font-size:.9rem;margin:2px 0}
+.tag{display:inline-block;font-size:.75rem;padding:1px 8px;border-radius:99px;border:1px solid var(--line);margin-right:4px}
+a.btn{display:inline-block;margin-top:6px;padding:6px 12px;border-radius:8px;background:var(--acc);color:#fff;text-decoration:none;font-size:.9rem}
+a.sec{color:var(--acc);font-size:.9rem;margin-left:10px}
+.empty{padding:24px;text-align:center;color:var(--mut)}
+</style>
+</head>
+<body>
+<main>
+<h1>Võrkpalli kalender</h1>
+<div class="sub" id="gen"></div>
+<div class="filters">
+  <select id="fGender"><option value="">Kõik (sugu)</option><option>mehed</option><option>naised</option><option>sega</option></select>
+  <select id="fLevel"><option value="">Kõik tasemed</option><option>A</option><option>B</option><option>C</option><option>D</option></select>
+  <select id="fDisc"><option value="">Kõik alad</option><option value="rannavolle">Rannavõrkpall</option><option value="saalivolle">Saalivõrkpall</option></select>
+  <select id="fSrc"></select>
+</div>
+<div id="list"></div>
+</main>
+<script src="events.js"></script>
+<script>
+const E = (window.EVENTS||{}).events||[];
+document.getElementById('gen').textContent = 'Uuendatud: ' + ((window.EVENTS||{}).generated||'?').replace('T',' ');
+const $ = id => document.getElementById(id);
+const srcs = [...new Set(E.map(e=>e.source))];
+$('fSrc').innerHTML = '<option value="">Kõik allikad</option>' + srcs.map(s=>`<option>${s}</option>`).join('');
+const MON = ['jaanuar','veebruar','märts','aprill','mai','juuni','juuli','august','september','oktoober','november','detsember'];
+const WD = ['P','E','T','K','N','R','L'];
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function match(e){
+  const g=$('fGender').value, l=$('fLevel').value, d=$('fDisc').value, s=$('fSrc').value;
+  if(g && !(e.gender||'').includes(g)) return false;
+  if(l && e.levels.length && !e.levels.includes(l)) return false;
+  if(d && e.discipline!==d) return false;
+  if(s && e.source!==s) return false;
+  return true;
+}
+function render(){
+  const ev = E.filter(match); let out='', cur='';
+  for(const e of ev){
+    const dt = new Date(e.date+'T00:00:00'), m = MON[dt.getMonth()]+' '+dt.getFullYear();
+    if(m!==cur){cur=m; out+=`<div class="month">${m}</div>`}
+    const time = e.start ? `${e.start}–${e.end}` : '';
+    const range = e.end_date && e.end_date!==e.date ? ` → ${e.end_date.split('-').reverse().join('.')}` : '';
+    out += `<div class="ev"><div class="day"><b>${dt.getDate()}</b><span>${WD[dt.getDay()]}</span></div><div>
+      <div class="t">${esc(e.title)}${range}</div>
+      <div class="meta">${[time, e.venue].filter(Boolean).map(esc).join(' · ')}</div>
+      <div>${e.gender?`<span class="tag">${esc(e.gender)}</span>`:''}${e.levels.map(l=>`<span class="tag">${l}</span>`).join('')}${e.kind==='liiga'?'<span class="tag">liiga</span>':''}${e.fee?`<span class="tag">${esc(e.fee)}</span>`:''}${e.reg_deadline?`<span class="tag">reg. kuni ${esc(e.reg_deadline)}</span>`:''}</div>
+      ${e.reg_url?`<a class="btn" href="${esc(e.reg_url)}" target="_blank" rel="noopener">Registreeru</a>`:''}
+      <a class="sec" href="${esc(e.info_url)}" target="_blank" rel="noopener">Info</a>
+    </div></div>`;
+  }
+  $('list').innerHTML = out || '<div class="empty">Sobivaid turniire ei leitud.</div>';
+}
+['fGender','fLevel','fDisc','fSrc'].forEach(i=>$(i).addEventListener('change',render));
+render();
+</script>
+</body>
+</html>
