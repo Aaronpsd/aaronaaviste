@@ -313,7 +313,7 @@ function daily() {
     else if (x.strategy === 'st') body.push(`Miks mega diil: ööhind ~${eur(x.m.adr)} × 365 × ${pct(x.m.occ, 0)} täituvus = ${eur(x.m.rev)} käivet; netotulu ${eur(x.m.noi)} investeeringult ${eur(x.m.invest)}. Piirkonna ööhind põhineb Booking.com valimil, täituvus on hinnang.`);
     else body.push(`Miks mega diil: turuüür ${eur(x.rent)}/kuus (${x.rentN} võrdlust) vs hind ${eur(x.bid)}; NOI ${eur(x.m.noi)}; pakkumise hind ${eur(x.perM2)}/m² vs piirkonna ${x.mvPerM2 ? Math.round(x.mvPerM2) + ' €/m²' : '—'}.`);
     body.push(`Suurim risk / kontrolli enne helistamist: ${flagsOf(x).join('; ')}. KÜ põhikiri, majandusaasta aruanne, remondifondi seis, laenud, üürilepingud, kütteviis.`);
-    const mb = x.strategy === 'lt' ? maxBidLT(x, P.megaLT) : x.strategy === 'st' ? maxBidST(x, P.megaST) : x.strategy === 'flip' ? maxBidFlip(x) : maxBidDirect(x);
+    const mb = x.strategy === 'lt' ? maxBidLT(x, x.cond === 'N' ? P.megaLTreno : P.megaLT) : x.strategy === 'st' ? maxBidST(x, P.megaST) : x.strategy === 'flip' ? maxBidFlip(x) : maxBidDirect(x);
     body.push(`Maksimaalne pakkumise hind: ${mb ? eur(mb) : eur(x.ask)}.\n`);
   }
   body.push(`Täna analüüsiti ${summary.analysed} objekti (uusi kuulutusi viimase päeva jooksul: ${summary.newInDay}).`);

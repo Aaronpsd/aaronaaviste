@@ -10,7 +10,7 @@ const has = (f) => process.argv.includes(f);
 
 // ===================== PARAMEETRID (vt prompt) =====================
 const BASE = {
-  maxPrice: 100000, minPrice: 15000, // alla 15 000 € objekte ei võta edetabelisse (ebalikviidne, tehingukulud ja NOI liiga väikesed): minu täiendus
+  maxPrice: 100000, minPrice: 8000, minPriceOther: 15000, // alla 15 000 € objekte ei võta edetabelisse (ebalikviidne, tehingukulud ja NOI liiga väikesed): minu täiendus
   flipCostWarn: 140000,
   ltv: 0.7, rate: 0.045, years: 30,
   buyCosts: 0.015, sellCosts: 0.035,
@@ -23,7 +23,7 @@ const BASE = {
   directMonths: 2.5, directMinDisc: 0.20,
   flipMinProfit: 12000, flipMinPct: 0.15,
   saleDiscount: 0.04, // tehinguhind alla küsitud hinna
-  megaSTParnu: 0.12, megaDirectDisc: 0.30, megaFlipProfit: 25000, megaFlipPct: 0.25, megaLT: 0.035, megaST: 0.10,
+  megaSTParnu: 0.12, megaDirectDisc: 0.30, megaFlipProfit: 25000, megaFlipPct: 0.25, megaLT: 0.035, megaLTreno: 0.03, megaST: 0.10,
   rentMult: 1, saleMult: 1, renoMult: 1,
 };
 const P = { ...BASE };
@@ -255,6 +255,7 @@ function evaluate(list = clean) {
     const rc = rentComps(x);
     const mvSame = saleComps(x, [x.cond]);
     const mvReno = saleComps(x, ['R', 'P']);
+    const lowP = x.price < P.minPriceOther; // alla 15 000 € objekte vaadatakse ainult pikaajalise üüri jaoks
     const base = { id: x.id, url: x.url, address: x.address, city: x.city, district: x.district, area: x.area, rooms: x.rooms, ask: x.price, bid: pr.bid, neg: pr.ng, cond: x.cond, details: x.details, title: x.title, note: x.note, ageDays: ageDays(x), reg: pr.reg.label, premium: pr.premium, extras: pr.ex, perM2: Math.round(x.price / x.area), mvPerM2: mvSame && mvSame.perM2, mvN: mvSame ? mvSame.n : 0 };
     // pikaajaline üür
     if (rc && rc.perM2 && rc.n >= 3) {
@@ -266,17 +267,17 @@ function evaluate(list = clean) {
     // lühiajaline üür
     {
       const reno = x.cond === 'N' ? P.reno.cosm * x.area * P.renoMult : 0;
-      const m = stModel(x, pr, reno);
+      const m = lowP ? null : stModel(x, pr, reno);
       if (m) out.st.push({ ...base, m, reno, riskAdj: m.netY - pr.premium / 100, conf: m.n >= 10 ? 'kõrge' : m.n >= 5 ? 'keskmine' : 'madal', village: x.village, strategy: 'st' });
     }
     // flip
-    if ((x.cond === 'N' || x.cond === 'M') && mvReno && mvReno.perM2 && mvReno.n >= 3) {
+    if (!lowP && (x.cond === 'N' || x.cond === 'M') && mvReno && mvReno.perM2 && mvReno.n >= 3) {
       const m = flipModel(x, pr, mvReno.perM2);
       const ok = m.net >= P.flipMinProfit && m.pct >= P.flipMinPct && m.arv / (x.price) <= 2.2;
       out.flip.push({ ...base, m, ok, arvPerM2: mvReno.perM2, arvN: mvReno.n, arvLevel: mvReno.level, conf: grade(mvReno.n, mvReno.level, x.village), strategy: 'flip', riskAdj: m.adj });
     }
     // otse edasimüük
-    if (mvSame && mvSame.perM2 && mvSame.n >= 3) {
+    if (!lowP && mvSame && mvSame.perM2 && mvSame.n >= 3) {
       const mvPrice = mvSame.perM2 * x.area;
       const disc = 1 - pr.bid / mvPrice;
       const m = directModel(x, pr, mvSame.perM2);
@@ -296,7 +297,7 @@ const URGENT = /kiire|pakkumised?|pärand|kolin|välismaale|kiirmüük|lepime\s+
 function megaDeals(ev) {
   const res = [];
   const fresh = (x) => x.ageDays <= 30; // ainult värsked kuulutused: igapäevane teavitus
-  for (const x of ev.lt) if (fresh(x) && x.conf === 'kõrge' && x.riskAdj >= P.megaLT) res.push({ x, strategy: 'Pikaajaline üür', main: `risk. korr. netotootlus ${(x.riskAdj * 100).toFixed(1)}%`, key: x.riskAdj });
+  for (const x of ev.lt) if (fresh(x) && x.conf === 'kõrge' && x.riskAdj >= (x.cond === 'N' ? P.megaLTreno : P.megaLT)) res.push({ x, strategy: 'Pikaajaline üür', main: `risk. korr. netotootlus ${(x.riskAdj * 100).toFixed(1)}%`, key: x.riskAdj });
   for (const x of ev.st) if (fresh(x) && x.conf === 'kõrge' && x.riskAdj >= (x.m.area === 'Pärnu' ? P.megaSTParnu : P.megaST)) res.push({ x, strategy: 'Lühiajaline üür', main: `risk. korr. netotootlus ${(x.riskAdj * 100).toFixed(1)}%`, key: x.riskAdj });
   for (const x of ev.flip) if (fresh(x) && x.ok && confOK(x) && x.m.net >= P.megaFlipProfit && x.m.pct >= P.megaFlipPct) res.push({ x, strategy: 'Flip', main: `puhaskasum ${Math.round(x.m.net).toLocaleString('et-EE')} €`, key: x.m.net / 100000 });
   for (const x of ev.direct) if (fresh(x) && x.ok && x.conf === 'kõrge' && x.disc >= P.megaDirectDisc && URGENT.test(`${x.title} ${x.note}`)) res.push({ x, strategy: 'Otse edasimüük', main: `${(x.disc * 100).toFixed(0)}% alla turuväärtuse, puhaskasum ${Math.round(x.m.net).toLocaleString('et-EE')} €`, key: x.disc });
