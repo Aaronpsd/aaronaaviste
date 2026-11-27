@@ -23,7 +23,7 @@ const BASE = {
   directMonths: 2.5, directMinDisc: 0.20,
   flipMinProfit: 12000, flipMinPct: 0.15,
   saleDiscount: 0.04, // tehinguhind alla küsitud hinna
-  megaSTParnu: 0.12, megaDirectDisc: 0.30, megaFlipProfit: 25000, megaFlipPct: 0.25, megaLT: 0.07, megaST: 0.10,
+  megaSTParnu: 0.12, megaDirectDisc: 0.30, megaFlipProfit: 25000, megaFlipPct: 0.25, megaLT: 0.035, megaST: 0.10,
   rentMult: 1, saleMult: 1, renoMult: 1,
 };
 const P = { ...BASE };
