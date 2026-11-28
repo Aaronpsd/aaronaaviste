@@ -1,0 +1,15 @@
+{
+  "_märkus": "Staatus: ok = lugeja töötab; vaja_allowlist = host pole selle sessiooni võrgus lubatud/ei ole veel kontrollitud; pole_lehte = turniirid ainult Facebookis/vormides",
+  "hallid": [
+    {"nimi": "Beach44 (Kiili/Luige, Harju)", "url": "https://www.beach44.ee/turniirid", "staatus": "ok", "märkus": "Karikasarjad (rannavolle, segavolle), reg. bit.ly lingid; hind/tähtaeg vormis"},
+    {"nimi": "Teras Beach (Tallinn, Lõuka 6)", "url": "https://terasbeach.ee", "staatus": "pole_lehte", "märkus": "Kodulehel turniirilehte pole; broneerimine Biitsi rakenduse kaudu, turniirid ilmselt Facebookis"},
+    {"nimi": "Beach House Ülemiste (Tallinn, Valukoja 12)", "url": "https://ulemistecity.ee/en/?p=6790", "staatus": "vaja_allowlist", "märkus": "Ametlik koduleht tuvastamata; turniirid Google Formsi kaudu (35 €/paar), ulemistecity.ee on ainult tutvustus"},
+    {"nimi": "NET Spordihall (Tartu)", "url": "", "staatus": "vaja_allowlist", "märkus": "Koduleht tuvastamata; 6 rannavälja (spordiregister)"},
+    {"nimi": "Nõo Rannahall (Tartumaa)", "url": "", "staatus": "vaja_allowlist", "märkus": "Koduleht tuvastamata; sportlyzer klubi"},
+    {"nimi": "Jõulumäe liivahall (Häädemeeste, Pärnumaa)", "url": "https://joulumae.ee", "staatus": "vaja_allowlist", "märkus": "Kontrollimata"}
+  ],
+  "keskkonnad": [
+    {"nimi": "turniir.ee (sport=3, võrkpall)", "url": "https://turniir.ee/?sport=3", "staatus": "ok", "märkus": "Enamik liigad/noored; filtreeritud"},
+    {"nimi": "volley.ee", "url": "https://volley.ee", "staatus": "vaja_lugeja", "märkus": "Ligipääs lubatud, lugeja kirjutamata (suvised rannavolle turniirid, Google Forms registreerimine)"}
+  ]
+}
